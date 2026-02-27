@@ -16,7 +16,7 @@ module.exports = {
 
         // 2. Parse Argument
         const targetId = args[0]?.replace(/[<@!>]/g, '');
-        if (!targetId) {
+        if (!targetId || !/^[0-9]{17,20}$/.test(targetId)) {
             return message.reply({ content: '❌ Usage: `.v rblacklist <User ID or @Mention>`' });
         }
 

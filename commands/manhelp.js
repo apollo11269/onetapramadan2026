@@ -36,8 +36,8 @@ module.exports = {
         '- `.v bl`: Display the blacklist.\n' +
         '- `.v wl`: Display the whitelist.\n\n' +
         '**Admin Only Commands:**\n' +
-        '- `.v bot-join`: Make the bot join your voice channel.\n' +
-        '- `.v bot-leave`: Make the bot leave your voice channel.'
+        '- `.v bot-join [channelId]`: Make the bot join a voice channel (admins only; you can specify an ID).\n' +
+        '- `.v bot-leave [channelId]`: Make the bot leave a voice channel (admins only; you can specify an ID).'
       )
       .setImage('https://i.ibb.co/mk6Tj1r/autovc.gif')
       .setThumbnail('https://i.ibb.co/Qp1SXBz/wisdom-logo.png')

@@ -1,5 +1,24 @@
 console.log('--- BOT STARTING ---');
 require('dotenv').config();
+
+// --- startup encryption backend check (no manual loading) ---
+let detectedBackend = null;
+try {
+  require.resolve('sodium-native');
+  detectedBackend = 'sodium-native';
+} catch { }
+if (!detectedBackend) {
+  try {
+    require.resolve('libsodium-wrappers');
+    detectedBackend = 'libsodium-wrappers';
+  } catch { }
+}
+if (detectedBackend) {
+  console.log(`[Init] encryption backend detected: ${detectedBackend}`);
+} else {
+  console.error('[Init][FATAL] No sodium-compatible encryption backend installed. Voice will not work!');
+}
+
 const { Client, GatewayIntentBits, PermissionFlagsBits, ChannelType, EmbedBuilder, Routes } = require('discord.js');
 const { joinVoiceChannel, VoiceConnectionStatus } = require('@discordjs/voice');
 const fs = require('fs');
@@ -49,6 +68,10 @@ const emptySince = new Map();
 // Track pending channel deletions so Cancel can actually stop them
 const pendingDeletes = new Map();
 
+
+// global unhandled error handlers (in case they're not already registered)
+process.on('unhandledRejection', (err) => logger.error('UnhandledRejection', err));
+process.on('uncaughtException', (err) => logger.error('UncaughtException', err));
 
 // Clean up old interaction IDs every 10 minutes to prevent memory leaks
 setInterval(() => {
@@ -114,7 +137,8 @@ process.on('SIGINT', () => {
 const commandPrefix = '.v';
 
 // Store the bot's voice connection to Create Room
-let createRoomConnection = null;
+// track create-room voice connections per guild to avoid races
+const createRoomConnections = new Map();
 
 // Function to count total users in temporary channels (excluding bots)
 function getTotalUsersInTempChannels(guild) {
@@ -153,25 +177,42 @@ async function connectToCreateRoom(guild, retryCount = 0) {
       return;
     }
 
-    if (createRoomConnection) {
-      try { createRoomConnection.destroy(); } catch (_) { }
+    // if we already have a connection for this guild that's still active, skip
+    const existing = createRoomConnections.get(guild.id);
+    if (existing) {
+      const state = existing.state;
+      if (state !== VoiceConnectionStatus.Destroyed && state !== VoiceConnectionStatus.Disconnected) {
+        logger.debug(`Existing create-room connection active for ${guild.name}, skipping new one.`);
+        return;
+      }
+      // previous connection is no longer usable, clean up
+      try { existing.destroy(); } catch (_) { }
+      createRoomConnections.delete(guild.id);
     }
 
-    createRoomConnection = joinVoiceChannel({
+    const connection = joinVoiceChannel({
       channelId: createRoomChannel.id,
       guildId: guild.id,
       adapterCreator: guild.voiceAdapterCreator,
       selfDeaf: true,
       selfMute: true,
     });
+    // store for the guild
+    createRoomConnections.set(guild.id, connection);
 
-    createRoomConnection.on(VoiceConnectionStatus.Ready, () => {
+    connection.on(VoiceConnectionStatus.Ready, () => {
       logger.success(`Connected to Create Room: "${createRoomChannel.name}" in ${guild.name}`);
     });
 
-    createRoomConnection.on(VoiceConnectionStatus.Disconnected, () => {
+    connection.on(VoiceConnectionStatus.Disconnected, () => {
       logger.warn(`Disconnected from Create Room in ${guild.name}. Retry ${retryCount + 1}/${MAX_RECONNECT_RETRIES}...`);
+      // remove from map before retrying
+      createRoomConnections.delete(guild.id);
       setTimeout(() => connectToCreateRoom(guild, retryCount + 1), 5000);
+    });
+
+    connection.on('error', (err) => {
+      logger.error('Voice connection error (createRoom)', err);
     });
 
   } catch (error) {
@@ -1532,7 +1573,12 @@ client.on('warn', (warning) => logger.warn(`Discord Warning: ${warning}`));
 // ─────────────────────────────────────────────────────────────────────────
 
 // ── Ready event ───────────────────────────────────────────────────────────
-client.on('ready', async () => {
+// emit custom ready event then handle it below
+client.on('ready', () => {
+  client.emit('clientReady');
+});
+
+client.on('clientReady', async () => {
   logger.success(`Logged in as ${client.user.tag}`);
   logger.info(`Connected to ${client.guilds.cache.size} guild(s)`);
   logger.info(`Serving ${client.users.cache.size} cached user(s)`);

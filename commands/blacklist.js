@@ -60,6 +60,17 @@ module.exports = {
         // 3. Add to Database
         addBlacklist(targetUser.id, message.author.id, expiresAt, reason);
 
+        // If the user is currently in the Create Room channel, kick them out immediately
+        try {
+            const createRoomId = process.env.CREATE_ROOM_ID;
+            const currChan = targetUser.voice.channel;
+            if (currChan && (currChan.id === createRoomId || currChan.name.includes('Create Room') || currChan.name.startsWith('➕') || currChan.name.toLowerCase().includes('create'))) {
+                await targetUser.voice.disconnect().catch(() => {});
+            }
+        } catch (e) {
+            console.warn('Failed to disconnect blacklisted user from Create Room', e);
+        }
+
         // 4. Construct V2 Response Payload
         const payload = {
             flags: 32768, // IS_COMPONENTS_V2

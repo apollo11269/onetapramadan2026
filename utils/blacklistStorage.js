@@ -12,14 +12,25 @@ if (!fs.existsSync(blacklistFilePath)) {
     fs.writeFileSync(blacklistFilePath, JSON.stringify({}), 'utf8');
 }
 
+// simple sanity check for Discord IDs
+function isValidDiscordId(id) {
+  return typeof id === 'string' && /^[0-9]{17,20}$/.test(id);
+}
+
 function loadBlacklist() {
-    try {
-        const data = fs.readFileSync(blacklistFilePath, 'utf8');
-        const parsed = JSON.parse(data);
-        // Clean up expired ones
-        const now = Date.now();
-        let changed = false;
-        for (const userId in parsed) {
+  try {
+    const data = fs.readFileSync(blacklistFilePath, 'utf8');
+    const parsed = JSON.parse(data);
+    // Clean up expired ones
+    const now = Date.now();
+    let changed = false;
+    for (const userId in parsed) {
+      if (!isValidDiscordId(userId)) {
+        // remove any malformed key just in case
+        delete parsed[userId];
+        changed = true;
+        continue;
+      }
             if (parsed[userId].expiresAt && parsed[userId].expiresAt < now) {
                 delete parsed[userId];
                 changed = true;
@@ -42,6 +53,7 @@ function saveBlacklist(blacklist) {
 }
 
 function isBlacklisted(userId) {
+    if (!isValidDiscordId(userId)) return null;
     const blacklist = loadBlacklist();
     if (blacklist[userId]) {
         const entry = blacklist[userId];
@@ -56,6 +68,7 @@ function isBlacklisted(userId) {
 }
 
 function addBlacklist(userId, moderatorId, expiresAt, reason) {
+    if (!isValidDiscordId(userId)) return;
     const blacklist = loadBlacklist();
     blacklist[userId] = {
         moderatorId,

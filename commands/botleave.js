@@ -2,7 +2,7 @@ const { EmbedBuilder } = require('discord.js');
 
 module.exports = {
   name: 'botleave',
-  description: 'Make the bot leave the voice channel.',
+  description: 'Make the bot leave a voice channel. Admins may provide a channel ID as argument.',
   execute: async (client, message, args, tempChannels) => {
     // Check if user has administrator permissions
     if (!message.member.permissions.has('Administrator')) {
@@ -20,14 +20,27 @@ module.exports = {
       return message.reply({ embeds: [noPermEmbed] });
     }
 
-    const voiceChannel = message.member.voice.channel;
-
-    if (!voiceChannel) {
-      const errorEmbed = new EmbedBuilder()
-        .setColor(0x2B2D31)
-        .setDescription('> <a:warning_animated:1361729714259099809> **You must be in a voice channel to use this command!**')
-        .setFooter({ text: 'TMPv - Ramadan Version 🌛 By APOllO', iconURL: client.user.displayAvatarURL() });
-      return message.reply({ embeds: [errorEmbed] });
+    // support optional channel-id argument
+    let voiceChannel;
+    if (args[0]) {
+      const id = args[0].replace(/[<@#>]/g, '');
+      voiceChannel = message.guild.channels.cache.get(id) || await message.guild.channels.fetch(id).catch(() => null);
+      if (!voiceChannel || voiceChannel.type !== 2 /*GuildVoice*/) {
+        const errorEmbed = new EmbedBuilder()
+          .setColor(0x2B2D31)
+          .setDescription('> <a:warning_animated:1361729714259099809> **Channel not found or not a voice channel!**')
+          .setFooter({ text: 'TMPv - Ramadan Version 🌛 By APOllO', iconURL: client.user.displayAvatarURL() });
+        return message.reply({ embeds: [errorEmbed] });
+      }
+    } else {
+      voiceChannel = message.member.voice.channel;
+      if (!voiceChannel) {
+        const errorEmbed = new EmbedBuilder()
+          .setColor(0x2B2D31)
+          .setDescription('> <a:warning_animated:1361729714259099809> **You must be in a voice channel to use this command!**')
+          .setFooter({ text: 'TMPv - Ramadan Version 🌛 By APOllO', iconURL: client.user.displayAvatarURL() });
+        return message.reply({ embeds: [errorEmbed] });
+      }
     }
 
     // Check if this is the Create Room channel - bot should not leave it
