@@ -1572,13 +1572,8 @@ client.on('error', (error) => logger.error('Discord Client Error', error));
 client.on('warn', (warning) => logger.warn(`Discord Warning: ${warning}`));
 // ─────────────────────────────────────────────────────────────────────────
 
-// ── Ready event ───────────────────────────────────────────────────────────
-// emit custom ready event then handle it below
-client.on('ready', () => {
-  client.emit('clientReady');
-});
-
-client.on('clientReady', async () => {
+// ── Ready handler (invoked after successful login) ──────────────────────────
+async function handleClientReady() {
   logger.success(`Logged in as ${client.user.tag}`);
   logger.info(`Connected to ${client.guilds.cache.size} guild(s)`);
   logger.info(`Serving ${client.users.cache.size} cached user(s)`);
@@ -1592,7 +1587,7 @@ client.on('clientReady', async () => {
   for (const guild of client.guilds.cache.values()) {
     await connectToCreateRoom(guild).catch(e => logger.error('connectToCreateRoom failed', e));
   }
-});
+}
 // ─────────────────────────────────────────────────────────────────────────
 
 // ── Role update: sync permissions to members in temp channels ─────────────
@@ -1642,12 +1637,44 @@ process.on('uncaughtException', (err) => logger.error('UncaughtException', err))
 // ─────────────────────────────────────────────────────────────────────────
 
 // ── Bot login with auto-retry ─────────────────────────────────────────────
-function startBot() {
-  client.login(process.env.DISCORD_TOKEN).catch((error) => {
-    logger.error('Failed to login. Retrying in 5 seconds...', error);
-    setTimeout(startBot, 5000);
-  });
+async function initSodium() {
+  // Try to load sodium-native first, fallback to libsodium-wrappers (WASM)
+  try {
+    const sodiumNative = require('sodium-native');
+    logger.info('sodium-native loaded successfully');
+    return 'sodium-native';
+  } catch (e) {
+    logger.debug('sodium-native not available, trying libsodium-wrappers');
+  }
+
+  try {
+    const libsodium = require('libsodium-wrappers');
+    if (libsodium && libsodium.ready) await libsodium.ready;
+    logger.info('libsodium-wrappers initialized successfully');
+    return 'libsodium-wrappers';
+  } catch (e) {
+    logger.error('No sodium backend could be initialized', e);
+    return null;
+  }
 }
 
-logger.info('Starting WISDOM TEMP Bot...');
+async function startBot() {
+  logger.info('Starting WISDOM TEMP Bot...');
+  const backend = await initSodium();
+  if (!backend) {
+    logger.warn('No encryption backend available. Voice may not work correctly.');
+  } else {
+    logger.info(`Using encryption backend: ${backend}`);
+  }
+
+  try {
+    await client.login(process.env.DISCORD_TOKEN);
+    // After login completes, run ready handler
+    await handleClientReady();
+  } catch (error) {
+    logger.error('Failed to login. Retrying in 5 seconds...', error);
+    setTimeout(startBot, 5000);
+  }
+}
+
 startBot();
