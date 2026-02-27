@@ -18,6 +18,16 @@ if (detectedBackend) {
 } else {
   console.error('[Init][FATAL] No sodium-compatible encryption backend installed. Voice will not work!');
 }
+//portdzb
+const express = require('express');
+const app = express();
+
+app.get('/', (req, res) => res.send('Bot is alive'));
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`[Web] Listening on port ${PORT}`);
+});
 
 const { Client, GatewayIntentBits, PermissionFlagsBits, ChannelType, EmbedBuilder, Routes } = require('discord.js');
 const { joinVoiceChannel, VoiceConnectionStatus } = require('@discordjs/voice');
